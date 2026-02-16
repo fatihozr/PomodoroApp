@@ -91,7 +91,7 @@ fun SettingsScreen(
                             title = "Pomodoro Süresi",
                             value = settings.pomodoroMinutes,
                             unit = "dakika",
-                            valueRange = 1f..60f,
+                            valueRange = 20f..60f,
                             onValueChange = { onSettingsChange(settings.copy(pomodoroMinutes = it.toInt())) }
                         )
 
@@ -101,7 +101,7 @@ fun SettingsScreen(
                             title = "Kısa Mola",
                             value = settings.shortBreakMinutes,
                             unit = "dakika",
-                            valueRange = 1f..30f,
+                            valueRange = 5f..30f,
                             onValueChange = { onSettingsChange(settings.copy(shortBreakMinutes = it.toInt())) }
                         )
 
@@ -111,7 +111,7 @@ fun SettingsScreen(
                             title = "Uzun Mola",
                             value = settings.longBreakMinutes,
                             unit = "dakika",
-                            valueRange = 5f..60f,
+                            valueRange = 10f..60f,
                             onValueChange = { onSettingsChange(settings.copy(longBreakMinutes = it.toInt())) }
                         )
 

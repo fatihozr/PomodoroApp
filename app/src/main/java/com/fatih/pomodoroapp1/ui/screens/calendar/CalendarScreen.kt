@@ -105,7 +105,6 @@ fun CalendarScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 🎪 CAROUSEL - Tarihte Bugün
             HistoricalEventsCarousel(
                 events = uiState.historicalEvents,
                 currentPage = uiState.carouselPage,
@@ -285,7 +284,7 @@ private fun CalendarDayCell(
     val backgroundColor by animateColorAsState(
         targetValue = when {
             isSelected -> MaterialTheme.colorScheme.primary
-            hasWork -> MaterialTheme.colorScheme.primaryContainer
+            hasWork -> Color.White // BEYAZ RENK - PEMBEDEKİ DEĞİŞİKLİK
             else -> Color.Transparent
         },
         label = "BgColor"
@@ -294,7 +293,7 @@ private fun CalendarDayCell(
     val contentColor by animateColorAsState(
         targetValue = when {
             isSelected -> MaterialTheme.colorScheme.onPrimary
-            hasWork -> MaterialTheme.colorScheme.onPrimaryContainer
+            hasWork -> Color.Black // Beyaz üzerine siyah yazı
             else -> MaterialTheme.colorScheme.onSurface
         },
         label = "TextColor"
@@ -404,7 +403,6 @@ private fun HistoricalEventsCarousel(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -446,7 +444,6 @@ private fun HistoricalEventsCarousel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Carousel Content
             AnimatedContent(
                 targetState = events,
                 transitionSpec = {
@@ -492,7 +489,6 @@ private fun HistoricalEventsCarousel(
                 }
             }
 
-            // Navigation Buttons (opsiyonel - otomatik carousel olduğu için)
             if (totalPages > 1) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(

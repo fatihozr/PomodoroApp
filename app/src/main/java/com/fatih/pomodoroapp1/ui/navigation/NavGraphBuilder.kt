@@ -55,7 +55,8 @@ fun NavGraphBuilder.statisticsScreen() {
 
         StatisticsScreen(
             uiState = uiState,
-            onPeriodChange = viewModel::onPeriodChange
+            onPeriodChange = viewModel::onPeriodChange,
+            onGoalUpdate = viewModel::onGoalUpdate
         )
     }
 }

@@ -1,19 +1,25 @@
 package com.fatih.pomodoroapp1.ui.screens.timer
 
-import kotlinx.coroutines.CancellationException
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fatih.pomodoroapp1.domain.model.TimerPhase
 import com.fatih.pomodoroapp1.domain.usecase.*
+import com.fatih.pomodoroapp1.service.TimerActionReceiver
+import com.fatih.pomodoroapp1.service.TimerNotificationService
 import com.fatih.pomodoroapp1.ui.model.TimerUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -22,7 +28,8 @@ class TimerViewModel @Inject constructor(
     private val getNextTimerPhaseUseCase: GetNextTimerPhaseUseCase,
     private val saveCompletedPomodoroUseCase: SaveCompletedPomodoroUseCase,
     private val observeShakeEventsUseCase: ObserveShakeEventsUseCase,
-    private val observePhoneOrientationUseCase: ObservePhoneOrientationUseCase
+    private val observePhoneOrientationUseCase: ObservePhoneOrientationUseCase,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TimerUiState())
@@ -32,14 +39,18 @@ class TimerViewModel @Inject constructor(
     private var shakeJob: Job? = null
     private var proximityCheckJob: Job? = null
 
-    private var timerStartTime = 0L
-    private var latestPhoneOrientation: Boolean = false
-    private val PROXIMITY_CHECK_INTERVAL = 3000L // 3 saniye
-    private val INITIAL_CHECK_DURATION = 5000L // İlk 5 saniye
-    private val INITIAL_POLL_INTERVAL = 1000L // İlk 5 saniyede 1 saniyede bir
-
     init {
         observeSettings()
+        setupNotificationActions()
+    }
+
+    private fun setupNotificationActions() {
+        TimerActionReceiver.setActionListener { action ->
+            when (action) {
+                TimerNotificationService.ACTION_PLAY_PAUSE -> onPlayPauseClick()
+                TimerNotificationService.ACTION_RESET -> onRestartClick()
+            }
+        }
     }
 
     private fun observeSettings() {
@@ -73,9 +84,7 @@ class TimerViewModel @Inject constructor(
     }
 
     fun onPlayPauseClick() {
-        val currentState = _uiState.value
-
-        if (currentState.isPaused) {
+        if (_uiState.value.isPaused) {
             startTimer()
         } else {
             pauseTimer()
@@ -84,9 +93,7 @@ class TimerViewModel @Inject constructor(
 
     private fun startTimer() {
         _uiState.update { it.copy(isPaused = false, error = null) }
-        timerStartTime = System.currentTimeMillis()
 
-        // Proximity sensör aktifse monitoring başlat
         if (_uiState.value.isProximitySensorEnabled) {
             startProximityMonitoring()
         }
@@ -97,18 +104,22 @@ class TimerViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(timeRemainingSeconds = it.timeRemainingSeconds - 1)
                 }
+                updateNotification()
             }
 
             if (_uiState.value.timeRemainingSeconds == 0) {
                 onTimerComplete()
             }
         }
+
+        updateNotification()
     }
 
     private fun pauseTimer() {
         _uiState.update { it.copy(isPaused = true) }
         timerJob?.cancel()
-        stopProximityMonitoring()
+        proximityCheckJob?.cancel()
+        updateNotification()
     }
 
     private fun onTimerComplete() {
@@ -116,14 +127,22 @@ class TimerViewModel @Inject constructor(
 
         viewModelScope.launch {
             if (currentState.phase == TimerPhase.POMODORO) {
+                // Mola bildirimi göster
+                showToast("🎉 Harika iş! Şimdi mola vermelisin!")
+
                 saveCompletedPomodoroUseCase().fold(
-                    onSuccess = { /* Başarılı */ },
+                    onSuccess = {
+                        println("✅ Pomodoro başarıyla kaydedildi")
+                    },
                     onFailure = { error ->
                         _uiState.update {
                             it.copy(error = "Pomodoro kaydedilemedi: ${error.message}")
                         }
                     }
                 )
+            } else {
+                // Mola bitti, çalışma zamanı
+                showToast("⏰ Mola bitti! Çalışmaya hazır mısın?")
             }
 
             moveToNextPhase()
@@ -161,6 +180,7 @@ class TimerViewModel @Inject constructor(
                         error = null
                     )
                 }
+                updateNotification()
             },
             onFailure = { error ->
                 _uiState.update {
@@ -194,6 +214,7 @@ class TimerViewModel @Inject constructor(
                                 isProximitySensorEnabled = it.isProximitySensorEnabled
                             )
                         }
+                        updateNotification()
                         throw CancellationException()
                     }
                 }
@@ -222,7 +243,12 @@ class TimerViewModel @Inject constructor(
     private fun startShakeDetection() {
         shakeJob = viewModelScope.launch {
             observeShakeEventsUseCase().collect {
+                val wasPaused = _uiState.value.isPaused
                 onPlayPauseClick()
+
+                // Toast message göster
+                val message = if (wasPaused) "Shake Algılandı: Play" else "Shake Algılandı: Pause"
+                showToast(message)
             }
         }
     }
@@ -232,59 +258,61 @@ class TimerViewModel @Inject constructor(
         shakeJob = null
     }
 
-    // Proximity Sensor
+    // Proximity Sensor - OPTIMIZE EDİLMİŞ
     fun toggleProximitySensor() {
         val currentState = _uiState.value
         val newState = !currentState.isProximitySensorEnabled
 
-        _uiState.update { it.copy(isProximitySensorEnabled = newState) }
+        println("🔄 Proximity Sensor: ${if (newState) "AÇIK" else "KAPALI"}")
 
         if (newState) {
-            // Sensör açıldı
             if (!currentState.isPaused) {
-                // Timer zaten çalışıyorsa, timer'ı durdur
+                println("⏸️ Proximity açıldı - Timer durduruluyor")
                 pauseTimer()
             }
+            _uiState.update { it.copy(isProximitySensorEnabled = true) }
         } else {
-            // Sensör kapatıldı
-            stopProximityMonitoring()
+            _uiState.update { it.copy(isProximitySensorEnabled = false) }
+            stopProximityDetection()
         }
     }
 
     private fun startProximityMonitoring() {
-        stopProximityMonitoring() // Önceki monitoring varsa durdur
-
         proximityCheckJob = viewModelScope.launch {
-            var elapsedTime = 0L
+            println("⏳ İlk 5 saniye: Her saniye kontrol ediliyor...")
 
-            // İLK 5 SANİYE: Her 1 saniyede bir kontrol
-            while (elapsedTime < INITIAL_CHECK_DURATION) {
-                // Tek seferlik orientation oku
-                latestPhoneOrientation = getSingleOrientationValue()
+            // İLK 5 SANİYE: Her saniye kontrol et
+            repeat(5) { second ->
+                delay(1000) // 1 saniye bekle
 
-                delay(INITIAL_POLL_INTERVAL)
-                elapsedTime += INITIAL_POLL_INTERVAL
-
-                // Timer durdu mu kontrol
-                if (_uiState.value.isPaused) {
-                    return@launch
-                }
+                val isFaceDown = measureOrientation()
+                println("🔍 ${second + 1}. saniye: isFaceDown=$isFaceDown")
             }
 
-            // 5 saniye sonunda kontrol - telefon yüz üstü mü?
-            if (!latestPhoneOrientation) {
+            // 5 saniye sonunda SON KONTROL
+            println("✅ 5 saniye geçti, son durum kontrol ediliyor...")
+            val finalCheck = measureOrientation()
+            println("🔍 5. saniye sonu kontrolü: isFaceDown=$finalCheck")
+
+            if (!finalCheck) {
+                println("❌ Telefon yüzü aşağı değil - Timer durduruluyor")
                 pauseTimer()
                 return@launch
             }
 
-            // 5 SANİYE SONRASI: Her 3 saniyede bir kontrol
+            println("✅ Telefon yüzü aşağı! Timer devam ediyor. Artık her 3 saniyede kontrol edilecek...")
+
+            // 5 saniye sonrası: Her 3 saniyede bir kontrol
+            var checkCount = 1
             while (_uiState.value.isProximitySensorEnabled && !_uiState.value.isPaused) {
-                delay(PROXIMITY_CHECK_INTERVAL)
+                delay(3000)
+                checkCount++
 
-                // Tek seferlik orientation oku
-                latestPhoneOrientation = getSingleOrientationValue()
+                val currentOrientation = measureOrientation()
+                println("🔍 Kontrol #$checkCount: isFaceDown=$currentOrientation")
 
-                if (!latestPhoneOrientation) {
+                if (!currentOrientation) {
+                    println("❌ Telefon kaldırıldı - Timer durduruluyor")
                     pauseTimer()
                     break
                 }
@@ -292,28 +320,56 @@ class TimerViewModel @Inject constructor(
         }
     }
 
-    private suspend fun getSingleOrientationValue(): Boolean {
-        var result = false
-        try {
-            observePhoneOrientationUseCase().collect { isFaceDown ->
-                result = isFaceDown
-                throw CancellationException() // İlk değeri al ve hemen çık
-            }
-        } catch (e: CancellationException) {
-            // Beklenen durum - flow'dan çıktık
-        }
-        return result
+    // Tek bir ölçüm al ve hemen kapat (PERFORMANS OPTİMİZASYONU)
+    private suspend fun measureOrientation(): Boolean {
+        return withTimeoutOrNull(500) {
+            observePhoneOrientationUseCase().first()
+        } ?: false
     }
 
-    private fun stopProximityMonitoring() {
+    private fun stopProximityDetection() {
         proximityCheckJob?.cancel()
         proximityCheckJob = null
+    }
+
+    private fun updateNotification() {
+        val state = _uiState.value
+
+        try {
+            TimerNotificationService.startService(
+                context = context,
+                timeRemaining = state.timeRemainingSeconds,
+                isPaused = state.isPaused
+            )
+        } catch (e: Exception) {
+            println("❌ Notification hatası: ${e.message}")
+        }
+    }
+
+    private fun stopNotification() {
+        TimerNotificationService.stopService(context)
+    }
+
+    private fun showToast(message: String) {
+        viewModelScope.launch {
+            try {
+                android.widget.Toast.makeText(
+                    context,
+                    message,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                println("❌ Toast hatası: ${e.message}")
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
         stopShakeDetection()
-        stopProximityMonitoring()
+        stopProximityDetection()
+        TimerActionReceiver.clearActionListener()
+        stopNotification()
     }
 }

@@ -9,9 +9,6 @@ import com.fatih.pomodoroapp1.domain.repository.SensorRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,8 +18,6 @@ import kotlin.math.sqrt
 class SensorRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context
 ) : SensorRepository {
-    private val _orientation = MutableStateFlow(false)
-    val orientation: StateFlow<Boolean> = _orientation.asStateFlow()
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
@@ -32,10 +27,10 @@ class SensorRepositoryImpl @Inject constructor(
     private var lastShakeResetTime = 0L
 
     // AYARLAR - Gyroscope hassasiyeti
-    private val SHAKE_THRESHOLD = 16f // Eşik değeri (yüksek = daha az hassas)
+    private val SHAKE_THRESHOLD = 14f // Eşik değeri (yüksek = daha az hassas)
     private val SHAKE_TIME_THRESHOLD = 800L // Minimum shake aralığı (ms) - 500'den 800'e çıkardık
     private val SHAKE_COUNT_RESET_TIME = 1500L // Shake sayacını sıfırlama süresi (ms)
-    private val MIN_SHAKE_COUNT = 1 // En az kaç kez shake algılanmalı - BURAYI 2 YAPARSANIZ 2 KEZ SALLAMALI
+    private val MIN_SHAKE_COUNT = 1 // En az kaç kez shake algılanmalı
     private val SHAKE_DURATION_THRESHOLD = 150L // Shake süresi minimum ne kadar olmalı (ms)
 
     private var shakeStartTime = 0L

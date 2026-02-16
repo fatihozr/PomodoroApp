@@ -31,8 +31,8 @@ import androidx.compose.ui.unit.sp
 import com.fatih.pomodoroapp1.domain.model.StatisticsPeriod
 import com.fatih.pomodoroapp1.ui.model.StatisticsUiState
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
-// Özel arka plan rengi
 val CustomCardBackgroundColor = Color(0xFFE0E0E5)
 
 @Composable
@@ -45,13 +45,11 @@ fun StatisticsScreen(
     val scrollState = rememberScrollState()
     val stats = uiState.statistics
 
-    // --- BİLDİRİM STATE'LERİ ---
     var messageVisible by remember { mutableStateOf(false) }
     var notificationMessage by remember { mutableStateOf("") }
     var notificationIcon by remember { mutableStateOf(Icons.Default.CheckCircle) }
     var notificationIconColor by remember { mutableStateOf(Color.Unspecified) }
 
-    // Mesaj görünür olduğunda 2.5 saniye bekle ve kapat
     LaunchedEffect(messageVisible) {
         if (messageVisible) {
             delay(2500)
@@ -59,9 +57,7 @@ fun StatisticsScreen(
         }
     }
 
-    // Ana kapsayıcı Box
     Box(modifier = modifier.fillMaxSize()) {
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -69,7 +65,6 @@ fun StatisticsScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Başlık
             Text(
                 text = "ODAK AKIŞI",
                 style = MaterialTheme.typography.headlineMedium,
@@ -78,7 +73,7 @@ fun StatisticsScreen(
             )
 
             Text(
-                text = "İstatistikler",
+                text = "İstatistik",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
@@ -86,7 +81,6 @@ fun StatisticsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Loading durumu
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
@@ -97,7 +91,6 @@ fun StatisticsScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                // Periyot seçici
                 PeriodSelector(
                     selectedPeriod = uiState.selectedPeriod,
                     onPeriodSelected = onPeriodChange
@@ -105,7 +98,6 @@ fun StatisticsScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // --- ANİMASYON BAŞLANGICI ---
                 AnimatedContent(
                     targetState = uiState.selectedPeriod,
                     transitionSpec = {
@@ -125,53 +117,63 @@ fun StatisticsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Üst istatistik kartları
-                        StatsOverview(
-                            totalPomodoros = stats.totalPomodoros,
-                            totalFocusHours = stats.totalFocusHours,
-                            averageDailyMinutes = stats.averageDailyMinutes
-                        )
+                        // ✅ FIX: Period'a göre farklı istatistikler göster + key ile recompose zorla
+                        key(targetPeriod, stats.totalPomodoros, stats.totalFocusHours) {
+                            StatsOverview(
+                                totalPomodoros = stats.totalPomodoros,
+                                totalFocusHours = stats.totalFocusHours,
+                                averageDailyMinutes = stats.averageDailyMinutes,
+                                period = targetPeriod
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Odaklanma süresi grafiği
-                        WeeklyFocusChart(data = stats.weeklyFocusData)
+                        when (targetPeriod) {
+                            StatisticsPeriod.WEEKLY -> {
+                                WeeklyFocusChart(data = stats.weeklyFocusData)
+                            }
+                            StatisticsPeriod.MONTHLY -> {
+                                MonthlyFocusChart(data = stats.monthlyFocusData)
+                            }
+                            StatisticsPeriod.YEARLY -> {
+                                YearlyFocusChart(data = stats.yearlyFocusData)
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Aktivite dağılımı
-                        ActivityDistributionChart(data = stats.activityDistribution)
+                        // ✅ FIX: key ile recompose zorla
+                        key(targetPeriod, stats.activityDistribution) {
+                            ActivityDistributionChart(
+                                data = stats.activityDistribution,
+                                period = targetPeriod
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // --- HEDEF KARTI ---
                         GoalCard(
                             period = targetPeriod,
-                            goalPomodoros = stats.weeklyGoalPomodoros,
-                            completedPomodoros = stats.weeklyCompletedPomodoros,
+                            goalPomodoros = stats.periodGoalPomodoros,
+                            completedPomodoros = stats.periodCompletedPomodoros,
                             onGoalUpdate = { newGoal ->
-                                // Önce veritabanına kaydet
                                 onGoalUpdate(newGoal)
 
-                                // Feedback Mantığı
-                                if (stats.weeklyCompletedPomodoros > newGoal) {
-                                    // Eğer tamamlanan > hedef ise AŞIM yapılmıştır
+                                if (stats.periodCompletedPomodoros >= newGoal && newGoal > 0) {
                                     notificationMessage = "Hedef AŞILDI! Harikasın 🏆"
-                                    notificationIcon = Icons.Default.EmojiEvents // Kupa
-                                    notificationIconColor = Color(0xFFD4AF37) // Altın Rengi
+                                    notificationIcon = Icons.Default.EmojiEvents
+                                    notificationIconColor = Color(0xFFD4AF37)
                                 } else {
-                                    // Normal kayıt
                                     notificationMessage = "Hedef Kaydedildi"
                                     notificationIcon = Icons.Default.CheckCircle
                                     notificationIconColor = Color.Black
                                 }
-
                                 messageVisible = true
                             }
                         )
                     }
                 }
-                // --- ANİMASYON BİTİŞİ ---
             }
 
             uiState.error?.let { error ->
@@ -186,7 +188,6 @@ fun StatisticsScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // --- DİNAMİK BİLDİRİM (NOTIFICATION) ---
         AnimatedVisibility(
             visible = messageVisible,
             enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
@@ -279,26 +280,46 @@ private fun PeriodSelector(
 private fun StatsOverview(
     totalPomodoros: Int,
     totalFocusHours: Int,
-    averageDailyMinutes: Int
+    averageDailyMinutes: Int,
+    period: StatisticsPeriod
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // ✅ Period'a göre başlıklar değişiyor
+        val (title1, title2, title3) = when (period) {
+            StatisticsPeriod.WEEKLY -> Triple(
+                "Haftalık\nPomodoro",
+                "Haftalık\nOdak Süresi",
+                "Ort. Haftalık\nSüre"
+            )
+            StatisticsPeriod.MONTHLY -> Triple(
+                "Aylık\nPomodoro",
+                "Aylık\nOdak Süresi",
+                "Ort. Aylık\nSüre"
+            )
+            StatisticsPeriod.YEARLY -> Triple(
+                "Yıllık\nPomodoro",
+                "Yıllık\nOdak Süresi",
+                "Ort. Yıllık\nSüre"
+            )
+        }
+
         StatCard(
-            title = "Toplam Pomodoro",
+            title = title1,
             value = totalPomodoros.toString(),
             modifier = Modifier.weight(1f)
         )
 
         StatCard(
-            title = "Toplam Odak Süresi",
+            title = title2,
             value = "$totalFocusHours saat",
             modifier = Modifier.weight(1f)
         )
 
         StatCard(
-            title = "Ort. Günlük Süre",
+            title = title3,
             value = "$averageDailyMinutes dk",
             modifier = Modifier.weight(1f)
         )
@@ -358,7 +379,7 @@ private fun WeeklyFocusChart(data: List<Int>) {
             modifier = Modifier.padding(20.dp)
         ) {
             Text(
-                text = "Odaklanma Süresi",
+                text = "Haftalık Odaklanma Süresi",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -367,6 +388,76 @@ private fun WeeklyFocusChart(data: List<Int>) {
 
             WeeklyBarChart(
                 data = data,
+                labels = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MonthlyFocusChart(data: List<Int>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = CustomCardBackgroundColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = "Aylık Odaklanma Süresi",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            WeeklyBarChart(
+                data = data,
+                labels = listOf("Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun YearlyFocusChart(data: List<Int>) {
+    val currentYear = LocalDate.now().year
+    val yearLabels = remember(currentYear) {
+        (0 until data.size).map { offset ->
+            (currentYear - (data.size - 1 - offset)).toString()
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = CustomCardBackgroundColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = "Yıllık Odaklanma Süresi",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            WeeklyBarChart(
+                data = data,
+                labels = yearLabels,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
@@ -378,9 +469,9 @@ private fun WeeklyFocusChart(data: List<Int>) {
 @Composable
 private fun WeeklyBarChart(
     data: List<Int>,
+    labels: List<String>,
     modifier: Modifier = Modifier
 ) {
-    val days = listOf("Pzt", "Sal", "Çar", "Per", "Cum")
     val maxValue = data.maxOrNull()?.toFloat() ?: 1f
 
     Column(modifier = modifier) {
@@ -391,27 +482,28 @@ private fun WeeklyBarChart(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.Bottom
         ) {
-            data.forEachIndexed { _, value ->
+            data.forEachIndexed { index, value ->
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Bottom
                 ) {
-                    Text(
-                        text = value.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
+                    if (value > 0) {
+                        Text(
+                            text = value.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
 
                     val heightFraction = if (maxValue > 0) value / maxValue else 0f
                     Box(
                         modifier = Modifier
-                            .width(32.dp)
-                            .fillMaxHeight(heightFraction)
+                            .width(if (labels.size > 7) 20.dp else 32.dp)
+                            .fillMaxHeight(heightFraction.coerceAtLeast(0.05f))
                             .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                             .background(MaterialTheme.colorScheme.primary)
                     )
@@ -425,14 +517,14 @@ private fun WeeklyBarChart(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            days.forEach { day ->
+            labels.forEach { label ->
                 Text(
-                    text = day,
+                    text = label,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    fontSize = 10.sp
+                    fontSize = if (labels.size > 7) 8.sp else 10.sp
                 )
             }
         }
@@ -440,7 +532,10 @@ private fun WeeklyBarChart(
 }
 
 @Composable
-private fun ActivityDistributionChart(data: Map<String, Int>) {
+private fun ActivityDistributionChart(
+    data: Map<String, Int>,
+    period: StatisticsPeriod
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -451,8 +546,15 @@ private fun ActivityDistributionChart(data: Map<String, Int>) {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
+            // ✅ FIX: Period'a göre başlık değişiyor
+            val title = when (period) {
+                StatisticsPeriod.WEEKLY -> "Haftalık Aktivite Dağılımı"
+                StatisticsPeriod.MONTHLY -> "Aylık Aktivite Dağılımı"
+                StatisticsPeriod.YEARLY -> "Yıllık Aktivite Dağılımı"
+            }
+
             Text(
-                text = "Aktivite Dağılımı",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -463,7 +565,8 @@ private fun ActivityDistributionChart(data: Map<String, Int>) {
                 data = data,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(180.dp),
+                key = period
             )
         }
     }
@@ -472,7 +575,8 @@ private fun ActivityDistributionChart(data: Map<String, Int>) {
 @Composable
 private fun DonutChart(
     data: Map<String, Int>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    key: Any? = null
 ) {
     val colors = listOf(
         Color(0xFF2C2C2C),
@@ -480,7 +584,7 @@ private fun DonutChart(
         Color(0xFFE89B63)
     )
 
-    val total = remember(data) { data.values.sum() }
+    val total = remember(data, key) { data.values.sum() }
     val defaultPrimaryColor = MaterialTheme.colorScheme.primary
 
     Box(
@@ -567,15 +671,14 @@ private fun GoalCard(
     onGoalUpdate: (Int) -> Unit
 ) {
     var showDialog by remember { mutableStateOf(false) }
-    var tempGoalInput by remember { mutableStateOf("") }
+    var tempGoalInput by remember(showDialog) {
+        mutableStateOf(if (goalPomodoros > 0) goalPomodoros.toString() else "")
+    }
 
-    val titleText = remember(period) {
-        when {
-            period.name.contains("WEEK", ignoreCase = true) -> "Haftalık Hedef"
-            period.name.contains("MONTH", ignoreCase = true) -> "Aylık Hedef"
-            period.name.contains("YEAR", ignoreCase = true) -> "Yıllık Hedef"
-            else -> "Hedef"
-        }
+    val titleText = when (period) {
+        StatisticsPeriod.WEEKLY -> "Haftalık Hedef"
+        StatisticsPeriod.MONTHLY -> "Aylık Hedef"
+        StatisticsPeriod.YEARLY -> "Yıllık Hedef"
     }
 
     val isGoalAchieved = goalPomodoros > 0 && completedPomodoros >= goalPomodoros
@@ -590,7 +693,9 @@ private fun GoalCard(
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = tempGoalInput,
-                        onValueChange = { tempGoalInput = it.filter { char -> char.isDigit() } },
+                        onValueChange = { input ->
+                            tempGoalInput = input.filter { it.isDigit() }.take(4)
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -601,10 +706,13 @@ private fun GoalCard(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val newGoal = tempGoalInput.toIntOrNull() ?: goalPomodoros
-                        onGoalUpdate(newGoal)
-                        showDialog = false
-                    }
+                        val newGoal = tempGoalInput.toIntOrNull()
+                        if (newGoal != null && newGoal > 0) {
+                            onGoalUpdate(newGoal)
+                            showDialog = false
+                        }
+                    },
+                    enabled = tempGoalInput.toIntOrNull()?.let { it > 0 } ?: false
                 ) {
                     Text("Kaydet")
                 }

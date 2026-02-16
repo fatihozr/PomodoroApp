@@ -1,9 +1,11 @@
 package com.fatih.pomodoroapp1.ui.screens.timer
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -54,7 +56,7 @@ fun TimerScreen(
 
         Text(
             text = when (uiState.phase) {
-                TimerPhase.POMODORO -> "Odaklanma Zamanı"
+                TimerPhase.POMODORO -> "Odak Zamanı"
                 TimerPhase.SHORT_BREAK -> "Kısa Mola"
                 TimerPhase.LONG_BREAK -> "Uzun Mola"
             },
@@ -131,6 +133,7 @@ fun TimerScreen(
     }
 }
 
+
 @Composable
 private fun SensorButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -139,41 +142,65 @@ private fun SensorButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Animasyonlu scale efekti
+    val scale by animateFloatAsState(
+        targetValue = if (isEnabled) 1.05f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "SensorButtonScale"
+    )
+
+    // Animasyonlu background color
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isEnabled) Color.Black else Color(0xFFE0E0E5),
+        animationSpec = tween(durationMillis = 300),
+        label = "SensorButtonBg"
+    )
+
+    // Animasyonlu icon color
+    val iconColor by animateColorAsState(
+        targetValue = if (isEnabled) Color.White else Color.Gray,
+        animationSpec = tween(durationMillis = 300),
+        label = "SensorIconColor"
+    )
+
+    // Animasyonlu text color
+    val textColor by animateColorAsState(
+        targetValue = if (isEnabled) Color.White else Color.Gray,
+        animationSpec = tween(durationMillis = 300),
+        label = "SensorTextColor"
+    )
+
     Surface(
-        modifier = modifier,
+        modifier = modifier.scale(scale),
         shape = MaterialTheme.shapes.medium,
-        color = if (isEnabled) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        },
+        color = backgroundColor,
         onClick = onClick,
-        tonalElevation = if (isEnabled) 4.dp else 1.dp
+        shadowElevation = if (isEnabled) 4.dp else 1.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Icon animasyonu
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                modifier = Modifier.size(20.dp),
-                tint = if (isEnabled) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                modifier = Modifier
+                    .size(22.dp)
+                    .scale(if (isEnabled) 1.1f else 1f),
+                tint = iconColor
             )
+
+            // Text animasyonu
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isEnabled) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                fontWeight = if (isEnabled) FontWeight.SemiBold else FontWeight.Normal
+                style = MaterialTheme.typography.labelLarge,
+                color = textColor,
+                fontWeight = if (isEnabled) FontWeight.Bold else FontWeight.Medium
             )
         }
     }
@@ -219,13 +246,12 @@ private fun TimerControls(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // SKIP BUTONU (ARTIK YUVARLAK)
         FilledTonalButton(
             onClick = onSkipClick,
             modifier = Modifier
                 .size(80.dp)
                 .scale(skipScale),
-            shape = CircleShape, // --- DEĞİŞİKLİK BURADA: Yuvarlak yapıldı ---
+            shape = CircleShape,
             interactionSource = skipInteractionSource,
             colors = ButtonDefaults.filledTonalButtonColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant

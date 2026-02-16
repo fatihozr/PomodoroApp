@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import javax.inject.Inject
 
-
 class ObserveStatisticsUseCase @Inject constructor(
     private val repository: StatisticsRepository
 ) {
@@ -31,3 +30,10 @@ class GetHistoricalEventsUseCase @Inject constructor(
     }
 }
 
+class UpdatePeriodGoalUseCase @Inject constructor(
+    private val repository: StatisticsRepository
+) {
+    suspend operator fun invoke(period: StatisticsPeriod, goalPomodoros: Int): Result<Unit> {
+        return repository.updatePeriodGoal(period, goalPomodoros)
+    }
+}

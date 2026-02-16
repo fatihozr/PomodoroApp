@@ -8,9 +8,9 @@ data class Settings(
     val notificationsEnabled: Boolean = false
 ) {
     fun isValid(): Boolean {
-        return pomodoroMinutes in 1..60 &&
-                shortBreakMinutes in 1..30 &&
-                longBreakMinutes in 5..60 &&
-                pomodoroCount in 1..10
+        return pomodoroMinutes in 20..60 &&
+                shortBreakMinutes in 5..30 &&
+                longBreakMinutes in 10..60 &&
+                pomodoroCount in 1..15
     }
 }
